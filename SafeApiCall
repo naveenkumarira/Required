@@ -1,0 +1,28 @@
+suspend fun <T> safeApiCall(apiCall: suspend () -> T): Result<T> {
+    return withContext(Dispatchers.IO) {
+        try {
+            Result.Success(apiCall.invoke())
+        } catch (throwable: Throwable) {
+            when (throwable) {
+                is IOException -> Result.Failure(throwable)
+                is HttpException -> {
+                    val code = throwable.code()
+                    val errorResponse = convertErrorBody(throwable)
+                    Result.Failure(ApiException(code, errorResponse))
+                }
+
+                else -> Result.Failure(throwable)
+            }
+        }
+    }
+}
+
+private fun convertErrorBody(throwable: HttpException): String? {
+    return try {
+        throwable.response()?.errorBody()?.string()
+    } catch (exception: Exception) {
+        null
+    }
+}
+
+class ApiException(val code: Int, message: String?) : IOException(message)
